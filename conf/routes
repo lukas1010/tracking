@@ -1,0 +1,2 @@
+# Receiving incoming tracking data
+POST        /api/receive        controllers.TrackingController.add()
