@@ -4,8 +4,8 @@ bin/
 /project/target
 /target
 .idea/
-.sbtserver/
+.sbtserver
+.sbtserver.lock
 app/utils/
 project/project/target
 RUNNING_PID
-project/.sbtserver

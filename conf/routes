@@ -2,4 +2,4 @@
 POST        /api/snapshots            controllers.TrackingController.add()
 # Sending stored tracking data
 GET         /api/snapshots/:id        controllers.TrackingController.track(id, time: Long, window: Int ?= 1)
-GET         /api/route                controllers.TrackingController.route(id, start: Long, finish: Long)
+GET         /api/routes/:id           controllers.TrackingController.route(id, start: Long, finish: Long)
