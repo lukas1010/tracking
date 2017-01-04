@@ -14,35 +14,51 @@ import scala.concurrent.Future
 trait GeoSnapDao {
   def create(geo: GeoSnap): Future[Completed]
 
-  def receive(id: String, ts: Long, margin: Int): Future[JsValue]
+  def receive(
+               ids: Seq[String],
+               lat_left: Double,
+               lat_right: Double,
+               lng_bottom: Double,
+               lng_top: Double,
+               time: Long,
+               window: Int): Future[Seq[JsValue]]
 
   def receive(id: String, from: Long, to: Long): Future[Seq[JsValue]]
 }
 
 @Singleton
 class MongoGeoSnapDao @Inject()(mongo: Mongo) extends GeoSnapDao {
-  private val geosnaps: MongoCollection[Document] = mongo.db getCollection "geosnaps"
-  private val geoDocToJson: Document => String =
-    doc => doc - "_id" + ("time" -> doc.get("time").get.asInt64.getValue.toString) toJson()
+  private val geoSnaps: MongoCollection[Document] = mongo.db getCollection "geosnaps"
+  private val geoDocToJson: Document => String = doc => doc - ("_id", GeoSnap.MILLIS) toJson()
 
-  override def create(geo: GeoSnap): Future[Completed] = geosnaps insertOne Document(Json toJson geo toString) head()
+  override def create(geo: GeoSnap): Future[Completed] = geoSnaps insertOne Document(Json toJson geo toString) head()
 
-  override def receive(id: String, ts: Long, margin: Int): Future[JsValue] =
-    geosnaps find Filters.and(
-      Filters.eq(GeoSnap.ID, id),
-      Filters.gte(GeoSnap.TIME, ts - margin * 500),
-      Filters.lte(GeoSnap.TIME, ts + margin * 500)) toFuture() map { seq =>
-      Json parse (seq.sortBy(doc => math.abs(doc.get(GeoSnap.TIME).get.asNumber.longValue - ts)).headOption match {
-        case None => throw new IllegalStateException
-        case Some(d) => geoDocToJson(d)
-      })
+  override def receive(
+                        ids: Seq[String],
+                        lat_left: Double,
+                        lat_right: Double,
+                        lng_bottom: Double,
+                        lng_top: Double,
+                        time: Long,
+                        window: Int): Future[Seq[JsValue]] =
+    geoSnaps find Filters.and(
+      if (ids != Nil) Filters.in(GeoSnap.ID, ids: _*) else Filters.exists(GeoSnap.ID),
+      Filters.gte(GeoSnap.LATITUDE, lat_left),
+      Filters.lte(GeoSnap.LATITUDE, lat_right),
+      Filters.gte(GeoSnap.LONGITUDE, lng_bottom),
+      Filters.lte(GeoSnap.LONGITUDE, lng_top),
+      Filters.gte(GeoSnap.MILLIS, time - (window * 1000)),
+      Filters.lte(GeoSnap.MILLIS, time)) toFuture() map {
+      _ groupBy (_ get GeoSnap.ID get) map { case (_, seq) =>
+        Json parse geoDocToJson(seq.sortBy(_.get(GeoSnap.MILLIS).get.asNumber.longValue).reverse.head)
+      } toSeq
     }
 
   override def receive(id: String, from: Long, to: Long): Future[Seq[JsValue]] =
-    geosnaps find Filters.and(
+    geoSnaps find Filters.and(
       Filters eq(GeoSnap.ID, id),
-      Filters lte(GeoSnap.TIME, to),
-      Filters gte(GeoSnap.TIME, from)) toFuture() map {
-      _ sortBy (_.get(GeoSnap.TIME).get.asNumber.longValue) map (Json parse geoDocToJson(_))
+      Filters lte(GeoSnap.MILLIS, to),
+      Filters gte(GeoSnap.MILLIS, from)) toFuture() map {
+      _ sortBy (_.get(GeoSnap.MILLIS).get.asNumber.longValue) map (Json parse geoDocToJson(_))
     }
 }

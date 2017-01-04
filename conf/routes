@@ -1,5 +1,11 @@
 # Receiving incoming tracking data
-POST        /api/snapshots            controllers.TrackingController.add()
+POST          /api/snapshots         controllers.TrackingController.add()
 # Sending stored tracking data
-GET         /api/snapshots/:id        controllers.TrackingController.track(id, time: Long, window: Int ?= 1)
-GET         /api/routes/:id           controllers.TrackingController.route(id, start: Long, finish: Long)
+GET           /api/snapshots/        controllers.TrackingController.position(ids: Seq[String] ?= Nil, lat1: Double ?= -180.0, lng1: Double ?= -90.0, lat2: Double ?= 180.0, lng2: Double ?= 90.0, time ?= "", window: Int ?= 60)
+GET           /api/routes/:id        controllers.TrackingController.route(id, start, finish)
+# Recieving incoming metadata
+POST          /api/assets/:id        controllers.AssetsController.add(id)
+PATCH         /api/assets/:id        controllers.AssetsController.update(id)
+DELETE        /api/assets/:id        controllers.AssetsController.delete(id)
+# Sending stored metadata
+GET           /api/assets/:id        controllers.AssetsController.read(id)
