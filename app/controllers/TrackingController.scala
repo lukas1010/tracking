@@ -4,9 +4,8 @@ import com.google.inject.Inject
 import daos.GeoSnapDao
 import models.GeoSnap
 import org.joda.time.DateTime
-import org.mongodb.scala.Completed
 import play.api.libs.concurrent.Execution.Implicits.defaultContext
-import play.api.libs.json.{JsError, JsSuccess, JsValue, Json}
+import play.api.libs.json._
 import play.api.mvc.{Action, AnyContent, Controller, Result}
 
 import scala.concurrent.Future
@@ -20,11 +19,14 @@ class TrackingController @Inject()(geoSnapDao: GeoSnapDao) extends Controller {
     case e: IllegalStateException => Future(NotFound(Json obj "Empty database return." -> e.toString))
   }
 
-  def add(): Action[JsValue] = Action.async(parse.json) { implicit request =>
+  def add(id: String): Action[JsValue] = Action.async(parse.json) { implicit request =>
     try {
-      request.body.validate[GeoSnap] match {
+      val ts = request.body.as[JsObject].fields.head._1
+      (request.body \ ts).get validate GeoSnap.geoSnapFormat match {
         case e: JsError => invJson(e)
-        case s: JsSuccess[GeoSnap] => geoSnapDao create s.get map { _: Completed => Accepted(Json toJson s.get) }
+        case s: JsSuccess[GeoSnap] =>
+          geoSnapDao create(id, DateTime parse ts getMillis, s.get copy (timestamp = Some(ts))) map
+            (r => Accepted(r.toString))
       }
     } catch {
       case a: AssertionError => invMsg(a, "Invalid data")
@@ -34,34 +36,30 @@ class TrackingController @Inject()(geoSnapDao: GeoSnapDao) extends Controller {
 
   def position(
                 ids: Seq[String],
-                lat1: Double,
-                lng1: Double,
-                lat2: Double,
-                lng2: Double,
-                time: String,
-                window: Int): Action[AnyContent] = Action.async {
+                lat1: Option[Double],
+                long1: Option[Double],
+                lat2: Option[Double],
+                long2: Option[Double],
+                time: Option[String],
+                window: Option[Int],
+                route: Boolean): Action[AnyContent] = Action.async {
     try {
-      val Seq(lat_left, lat_right) = Seq(
-        if (lat1 >= -180 && lat1 <= 180) lat1 else -180,
-        if (lat2 >= -180 && lat2 <= 180) lat2 else 180).sorted
-      val Seq(lng_bottom, lng_top) = Seq(
-        if (lng1 >= -90 && lng1 <= 90) lng1 else -90,
-        if (lng2 >= -90 && lng2 <= 90) lng2 else 90).sorted
-      val ts = if (time == "") DateTime.now() getMillis() else DateTime parse time getMillis()
-      val w = if (window > 0) window else 60
-      geoSnapDao receive(ids, lat_left, lat_right, lng_bottom, lng_top, ts, w) map
-        (seq => Ok(Json toJson seq)) recoverWith recMsg
-    } catch {
-      case i: IllegalArgumentException => invMsg(i, "Invalid time string format.")
-    }
-  }
+      def chk(x: Option[Double], z: Int): Boolean = x match {
+        case Some(d) if d >= -z && d <= z => true
+        case None => false
+        case Some(d) => throw new IllegalArgumentException(s"Invalid coordinate: $d")
+      }
 
-  def route(id: String, start: String, finish: String): Action[AnyContent] = Action.async {
-    try {
-      geoSnapDao receive(id, DateTime parse start getMillis, DateTime parse finish getMillis) map
-        (s => Ok(Json toJson s)) recoverWith recMsg
+      val geo = if (chk(lat1, 180) && chk(lat2, 180) && chk(long1, 90) && chk(long2, 90) && long1.get > long2.get)
+        Some((lat1.get, lat2.get, long2.get, long1.get)) else None
+      val now = DateTime.now() getMillis()
+      val ts = if (time.isEmpty) now else math.min(DateTime parse time.get getMillis(), now)
+      val w = if (window.isDefined && window.get > 0) window.get else 60
+      (if (route) geoSnapDao receiveRoute(ids, geo, ts, w) else geoSnapDao receiveLast(ids, geo, ts, w)) map {
+        seq => Ok(Json toJson seq)
+      }
     } catch {
-      case i: IllegalArgumentException => invMsg(i, "Invalid request")
+      case i: IllegalArgumentException => invMsg(i, "Invalid parameters.")
     }
   }
 }

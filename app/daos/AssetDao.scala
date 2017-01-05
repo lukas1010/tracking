@@ -14,6 +14,8 @@ import scala.concurrent.Future
 trait AssetDao {
   def exists(id: String): Future[Boolean]
 
+  def list(): Future[JsValue]
+
   def create(id: String, meta: JsValue): Future[Completed]
 
   def receive(id: String): Future[JsValue]
@@ -30,22 +32,26 @@ class MongoAssetDao @Inject()(mongo: Mongo) extends AssetDao {
 
   override def exists(id: String): Future[Boolean] = assets count idMatch(id) head() map (_ > 0)
 
+  override def list(): Future[JsValue] =
+    assets find() toFuture() map (seq => Json toJson seq.map(doc => (doc get "_id").get.asString.getValue))
+
   override def create(id: String, meta: JsValue): Future[Completed] =
     assets insertOne Document(meta toString) + ("_id" -> id) head()
 
-  override def receive(id: String): Future[JsValue] = assets find idMatch(id) head() map
-    (d => Json parse (d - "_id" toJson))
+  override def receive(id: String): Future[JsValue] =
+    assets find idMatch(id) head() map (d => Json parse (d - "_id" toJson))
 
-  override def update(id: String, meta: JsValue): Future[UpdateResult] = assets find idMatch(id) head() flatMap {
-    doc => {
-      val j = JsObject(((Json parse doc.toJson).as[JsObject] deepMerge meta.as[JsObject]).fields filter {
-        case (_, JsNull) => false
-        case (_, JsString("")) => false
-        case _ => true
-      })
-      assets replaceOne(idMatch(id), Document(j toString)) head()
+  override def update(id: String, meta: JsValue): Future[UpdateResult] =
+    assets find idMatch(id) head() flatMap {
+      doc => {
+        val j = JsObject(((Json parse doc.toJson).as[JsObject] deepMerge meta.as[JsObject]).fields filter {
+          case (_, JsNull) => false
+          case (_, JsString("")) => false
+          case _ => true
+        })
+        assets replaceOne(idMatch(id), Document(j toString)) head()
+      }
     }
-  }
 
   override def delete(id: String): Future[DeleteResult] = assets deleteOne idMatch(id) head()
 }

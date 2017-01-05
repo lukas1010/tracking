@@ -1,11 +1,10 @@
 # Receiving incoming tracking data
-POST          /api/snapshots         controllers.TrackingController.add()
+PUT           /api/v1/snapshots        controllers.TrackingController.add(id)
 # Sending stored tracking data
-GET           /api/snapshots/        controllers.TrackingController.position(ids: Seq[String] ?= Nil, lat1: Double ?= -180.0, lng1: Double ?= -90.0, lat2: Double ?= 180.0, lng2: Double ?= 90.0, time ?= "", window: Int ?= 60)
-GET           /api/routes/:id        controllers.TrackingController.route(id, start, finish)
+GET           /api/v1/snapshots        controllers.TrackingController.position(id: Seq[String] ?= Nil, lat1: Option[Double], long1: Option[Double], lat2: Option[Double], long2: Option[Double], datetime: Option[String], seconds: Option[Int], route: Boolean = false)
+GET           /api/v1/route            controllers.TrackingController.position(id: Seq[String] ?= Nil, lat1: Option[Double], long1: Option[Double], lat2: Option[Double], long2: Option[Double], datetime: Option[String], seconds: Option[Int], route: Boolean = true)
 # Recieving incoming metadata
-POST          /api/assets/:id        controllers.AssetsController.add(id)
-PATCH         /api/assets/:id        controllers.AssetsController.update(id)
-DELETE        /api/assets/:id        controllers.AssetsController.delete(id)
+PUT           /api/v1/metadata         controllers.AssetsController.update()
+DELETE        /api/v1/metadata         controllers.AssetsController.delete(id)
 # Sending stored metadata
-GET           /api/assets/:id        controllers.AssetsController.read(id)
+GET           /api/v1/metadata         controllers.AssetsController.read(id: Option[String])
